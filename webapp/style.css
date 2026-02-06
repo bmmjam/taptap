@@ -1,0 +1,282 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--tg-theme-bg-color, #1a1a2e);
+  color: var(--tg-theme-text-color, #eee);
+  min-height: 100vh;
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 20px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* Intro Screen */
+#intro-screen {
+  text-align: center;
+  animation: fadeIn 0.5s ease;
+}
+
+#intro-screen h1 {
+  font-size: 48px;
+  margin-bottom: 8px;
+  background: linear-gradient(135deg, #FFD93D, #FF6B6B);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.subtitle {
+  font-size: 18px;
+  opacity: 0.8;
+  margin-bottom: 32px;
+}
+
+.hint {
+  font-size: 14px;
+  opacity: 0.5;
+  line-height: 1.5;
+  margin-bottom: 24px;
+}
+
+#start-btn, #retry-btn {
+  background: var(--tg-theme-button-color, #FFD93D);
+  color: var(--tg-theme-button-text-color, #1a1a2e);
+  border: none;
+  border-radius: 12px;
+  padding: 14px 48px;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+#start-btn:active, #retry-btn:active {
+  transform: scale(0.95);
+  opacity: 0.8;
+}
+
+/* Tap Screen */
+#tap-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  animation: fadeIn 0.3s ease;
+}
+
+#timer-bar {
+  width: 80%;
+  max-width: 300px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  margin-bottom: 40px;
+  overflow: hidden;
+}
+
+#timer-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #FFD93D, #FF6B6B);
+  border-radius: 3px;
+  transition: width 0.1s linear;
+}
+
+#face-container {
+  position: relative;
+  width: 200px;
+  height: 200px;
+  margin-bottom: 24px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+#face {
+  position: relative;
+  z-index: 2;
+  transition: transform 0.08s ease;
+}
+
+#face.tapped {
+  transform: scale(0.92);
+}
+
+#pulse-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%) scale(1);
+  border: 3px solid rgba(255, 217, 61, 0.4);
+  opacity: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+#pulse-ring.animate {
+  animation: pulse 0.5s ease-out;
+}
+
+@keyframes pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.6);
+    opacity: 0;
+  }
+}
+
+#tap-counter {
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+#gyro-hint {
+  margin-bottom: 0;
+  min-height: 20px;
+}
+
+/* Result Screen */
+#result-screen {
+  text-align: center;
+  width: 100%;
+  max-width: 360px;
+  animation: fadeIn 0.5s ease;
+}
+
+#thinking {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+#thinking-face {
+  animation: wobble 1s ease-in-out infinite;
+}
+
+#thinking p {
+  font-size: 18px;
+  opacity: 0.7;
+}
+
+@keyframes wobble {
+  0%, 100% { transform: rotate(-5deg); }
+  50% { transform: rotate(5deg); }
+}
+
+#result-card {
+  animation: slideUp 0.5s ease;
+}
+
+#result-emoji {
+  font-size: 72px;
+  margin-bottom: 12px;
+}
+
+#result-emotion {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+
+#result-description {
+  font-size: 15px;
+  opacity: 0.7;
+  line-height: 1.5;
+  margin-bottom: 24px;
+}
+
+#result-advice {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+#result-advice h3 {
+  font-size: 14px;
+  opacity: 0.5;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+#advice-list {
+  list-style: none;
+  padding: 0;
+}
+
+#advice-list li {
+  padding: 8px 0;
+  font-size: 15px;
+  line-height: 1.4;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+#advice-list li:last-child {
+  border-bottom: none;
+}
+
+#result-stats {
+  font-size: 12px;
+  opacity: 0.3;
+  margin-bottom: 24px;
+}
+
+#retry-btn {
+  width: 100%;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Face expressions */
+#face-bg {
+  transition: fill 0.15s ease;
+}
+
+.face-stressed #face-bg { fill: #FF6B6B; }
+.face-excited #face-bg { fill: #FFA94D; }
+.face-calm #face-bg { fill: #69DB7C; }
+.face-anxious #face-bg { fill: #DA77F2; }
+.face-focused #face-bg { fill: #74C0FC; }
+.face-sad #face-bg { fill: #748FFC; }
