@@ -1,50 +1,133 @@
 (function () {
   'use strict';
 
-  const SESSION_DURATION = 5000;
+  var MAX_DURATION = 30000;
 
   // --- DOM ---
-  const introScreen = document.getElementById('intro-screen');
-  const tapScreen = document.getElementById('tap-screen');
-  const resultScreen = document.getElementById('result-screen');
-  const startBtn = document.getElementById('start-btn');
-  const retryBtn = document.getElementById('retry-btn');
-  const faceContainer = document.getElementById('face-container');
-  const face = document.getElementById('face');
-  const pulseRing = document.getElementById('pulse-ring');
-  const tapCounter = document.getElementById('tap-counter');
-  const timerFill = document.getElementById('timer-fill');
-  const gyroHint = document.getElementById('gyro-hint');
-  const thinkingDiv = document.getElementById('thinking');
-  const resultCard = document.getElementById('result-card');
-  const resultEmoji = document.getElementById('result-emoji');
-  const resultEmotion = document.getElementById('result-emotion');
-  const resultDescription = document.getElementById('result-description');
-  const adviceList = document.getElementById('advice-list');
-  const resultStats = document.getElementById('result-stats');
-  const mouth = document.getElementById('mouth');
+  var introScreen = document.getElementById('intro-screen');
+  var tapScreen = document.getElementById('tap-screen');
+  var resultScreen = document.getElementById('result-screen');
+  var startBtn = document.getElementById('start-btn');
+  var retryBtn = document.getElementById('retry-btn');
+  var doneBtn = document.getElementById('done-btn');
+  var tapArea = document.getElementById('tap-area');
+  var face = document.getElementById('face');
+  var pulseRing = document.getElementById('pulse-ring');
+  var tapCounter = document.getElementById('tap-counter');
+  var gyroHint = document.getElementById('gyro-hint');
+  var thinkingDiv = document.getElementById('thinking');
+  var resultCard = document.getElementById('result-card');
+  var resultEmoji = document.getElementById('result-emoji');
+  var resultEmotion = document.getElementById('result-emotion');
+  var resultDescription = document.getElementById('result-description');
+  var adviceList = document.getElementById('advice-list');
+  var resultStats = document.getElementById('result-stats');
+  var mouth = document.getElementById('mouth');
+  var trailCanvas = document.getElementById('trail-canvas');
+  var ctx = trailCanvas.getContext('2d');
 
   // --- State ---
-  let sessionActive = false;
-  let sessionStart = 0;
-  let taps = [];
-  let motionSamples = [];
-  let orientationSamples = [];
-  let gyroAvailable = false;
-  let timerInterval = null;
+  var sessionActive = false;
+  var sessionStart = 0;
+  var taps = [];
+  var motionSamples = [];
+  var orientationSamples = [];
+  var gyroAvailable = false;
+  var autoEndTimer = null;
+  var isDown = false;
+  var lastPoint = null;
+  var trailPoints = []; // {x, y, t, age}
+  var animFrameId = null;
+  var trailHue = 45; // start golden
 
   // --- Telegram WebApp ---
-  const tg = window.Telegram && window.Telegram.WebApp;
+  var tg = window.Telegram && window.Telegram.WebApp;
   if (tg) {
     tg.ready();
     tg.expand();
+  }
+
+  // --- Canvas sizing ---
+  function resizeCanvas() {
+    trailCanvas.width = trailCanvas.offsetWidth * (window.devicePixelRatio || 1);
+    trailCanvas.height = trailCanvas.offsetHeight * (window.devicePixelRatio || 1);
+    ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+  }
+
+  // --- Trail rendering ---
+  function renderTrail() {
+    if (!sessionActive) return;
+
+    var now = Date.now();
+    ctx.clearRect(0, 0, trailCanvas.width, trailCanvas.height);
+
+    // Remove old points (fade after 1.5s)
+    var fadeTime = 1500;
+    trailPoints = trailPoints.filter(function (p) {
+      return now - p.t < fadeTime;
+    });
+
+    if (trailPoints.length < 2) {
+      animFrameId = requestAnimationFrame(renderTrail);
+      return;
+    }
+
+    // Draw trail segments
+    for (var i = 1; i < trailPoints.length; i++) {
+      var prev = trailPoints[i - 1];
+      var curr = trailPoints[i];
+
+      // Skip if from different strokes
+      if (curr.stroke !== prev.stroke) continue;
+
+      var age = now - curr.t;
+      var alpha = Math.max(0, 1 - age / fadeTime);
+      var lineWidth = Math.max(2, 8 * alpha);
+
+      // Shift hue along the trail
+      var hue = (trailHue + i * 0.5) % 360;
+
+      ctx.beginPath();
+      ctx.moveTo(prev.x, prev.y);
+      ctx.lineTo(curr.x, curr.y);
+      ctx.strokeStyle = 'hsla(' + hue + ', 100%, 65%, ' + alpha + ')';
+      ctx.lineWidth = lineWidth;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+
+      // Glow effect
+      if (alpha > 0.3) {
+        ctx.beginPath();
+        ctx.moveTo(prev.x, prev.y);
+        ctx.lineTo(curr.x, curr.y);
+        ctx.strokeStyle = 'hsla(' + hue + ', 100%, 80%, ' + (alpha * 0.3) + ')';
+        ctx.lineWidth = lineWidth + 8;
+        ctx.stroke();
+      }
+    }
+
+    // Draw glow dot at current finger position
+    if (isDown && trailPoints.length > 0) {
+      var last = trailPoints[trailPoints.length - 1];
+      var dotHue = (trailHue + trailPoints.length * 0.5) % 360;
+      ctx.beginPath();
+      ctx.arc(last.x, last.y, 12, 0, Math.PI * 2);
+      ctx.fillStyle = 'hsla(' + dotHue + ', 100%, 75%, 0.5)';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(last.x, last.y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = 'hsla(' + dotHue + ', 100%, 90%, 0.9)';
+      ctx.fill();
+    }
+
+    animFrameId = requestAnimationFrame(renderTrail);
   }
 
   // --- Gyroscope Setup ---
   function initGyroscope() {
     if (typeof DeviceMotionEvent !== 'undefined' &&
         typeof DeviceMotionEvent.requestPermission === 'function') {
-      // iOS 13+
       DeviceMotionEvent.requestPermission()
         .then(function (state) {
           if (state === 'granted') {
@@ -88,10 +171,24 @@
     });
   }
 
-  // --- Tap Handling ---
+  // --- Stroke counter for trail (to not connect separate strokes) ---
+  var strokeId = 0;
+
+  // --- Pointer Handling ---
   function onPointerDown(e) {
     if (!sessionActive) return;
     e.preventDefault();
+
+    isDown = true;
+    strokeId++;
+    lastPoint = { x: e.clientX, y: e.clientY };
+
+    trailPoints.push({
+      x: e.clientX,
+      y: e.clientY,
+      t: Date.now(),
+      stroke: strokeId
+    });
 
     var now = Date.now();
     taps.push({
@@ -105,18 +202,37 @@
     // Visual feedback
     face.classList.add('tapped');
     pulseRing.classList.remove('animate');
-    void pulseRing.offsetWidth; // force reflow
+    void pulseRing.offsetWidth;
     pulseRing.classList.add('animate');
 
-    // Mouth reacts
+    // Shift trail color on each tap
+    trailHue = (trailHue + 30) % 360;
+
     var tapCount = taps.filter(function (t) { return t.type === 'down'; }).length;
     updateFaceMouth(tapCount);
     tapCounter.textContent = tapCount + ' ' + pluralize(tapCount, 'тап', 'тапа', 'тапов');
   }
 
+  function onPointerMove(e) {
+    if (!sessionActive || !isDown) return;
+    e.preventDefault();
+
+    trailPoints.push({
+      x: e.clientX,
+      y: e.clientY,
+      t: Date.now(),
+      stroke: strokeId
+    });
+
+    lastPoint = { x: e.clientX, y: e.clientY };
+  }
+
   function onPointerUp(e) {
     if (!sessionActive) return;
     e.preventDefault();
+
+    isDown = false;
+    lastPoint = null;
 
     taps.push({
       time: Date.now(),
@@ -130,7 +246,6 @@
   }
 
   function updateFaceMouth(count) {
-    // Mouth gets more expressive with more taps
     var openness = Math.min(count * 3, 40);
     var y = 125 + openness * 0.1;
     var qy = 160 + openness * 0.3;
@@ -141,25 +256,16 @@
     }
   }
 
-  // --- Timer ---
-  function startTimer() {
-    var start = Date.now();
-    timerInterval = setInterval(function () {
-      var elapsed = Date.now() - start;
-      var pct = Math.max(0, 1 - elapsed / SESSION_DURATION);
-      timerFill.style.width = (pct * 100) + '%';
-
-      if (elapsed >= SESSION_DURATION) {
-        endSession();
-      }
-    }, 50);
-  }
-
   // --- Session ---
   function startSession() {
     taps = [];
     motionSamples = [];
     orientationSamples = [];
+    trailPoints = [];
+    strokeId = 0;
+    isDown = false;
+    lastPoint = null;
+    trailHue = 45;
     sessionActive = true;
     sessionStart = Date.now();
 
@@ -167,8 +273,10 @@
     resultScreen.classList.add('hidden');
     tapScreen.classList.remove('hidden');
 
+    resizeCanvas();
+    ctx.clearRect(0, 0, trailCanvas.width, trailCanvas.height);
+
     tapCounter.textContent = '0 тапов';
-    timerFill.style.width = '100%';
     face.classList.remove('face-stressed', 'face-excited', 'face-calm',
                           'face-anxious', 'face-focused', 'face-sad');
     mouth.setAttribute('d', 'M 60 125 Q 100 160 140 125');
@@ -182,12 +290,20 @@
     }
 
     initGyroscope();
-    startTimer();
+
+    // Auto-end after 30s
+    autoEndTimer = setTimeout(function () {
+      if (sessionActive) endSession();
+    }, MAX_DURATION);
+
+    // Start trail rendering loop
+    animFrameId = requestAnimationFrame(renderTrail);
   }
 
   function endSession() {
     sessionActive = false;
-    clearInterval(timerInterval);
+    clearTimeout(autoEndTimer);
+    if (animFrameId) cancelAnimationFrame(animFrameId);
 
     tapScreen.classList.add('hidden');
     resultScreen.classList.remove('hidden');
@@ -204,20 +320,16 @@
   function analyze() {
     var downs = taps.filter(function (t) { return t.type === 'down'; });
     var tapCount = downs.length;
-    var duration = SESSION_DURATION / 1000;
-    var frequency = tapCount / duration; // taps per second
+    var actualDuration = (Date.now() - sessionStart) / 1000;
+    var frequency = tapCount / actualDuration;
 
-    // Average pressure
     var avgPressure = 0;
     if (tapCount > 0) {
       var sum = 0;
-      for (var i = 0; i < downs.length; i++) {
-        sum += downs[i].pressure;
-      }
+      for (var i = 0; i < downs.length; i++) sum += downs[i].pressure;
       avgPressure = sum / tapCount;
     }
 
-    // Average tap area (width * height as proxy for touch size)
     var avgArea = 0;
     if (tapCount > 0) {
       var areaSum = 0;
@@ -227,7 +339,6 @@
       avgArea = areaSum / tapCount;
     }
 
-    // Tap intervals & regularity
     var intervals = [];
     for (var i = 1; i < downs.length; i++) {
       intervals.push(downs[i].time - downs[i - 1].time);
@@ -245,10 +356,8 @@
       }
       intervalVariance = Math.sqrt(varSum / intervals.length);
     }
-    // Normalize regularity: 0 = very irregular, 1 = very regular
     var regularity = avgInterval > 0 ? Math.max(0, 1 - intervalVariance / avgInterval) : 0;
 
-    // Hold durations
     var avgHold = 0;
     var ups = taps.filter(function (t) { return t.type === 'up'; });
     if (downs.length > 0 && ups.length > 0) {
@@ -260,22 +369,29 @@
       avgHold = holdSum / holdCount;
     }
 
-    // Gyroscope: shake intensity
+    // Trail: total distance drawn
+    var totalTrailDist = 0;
+    for (var i = 1; i < trailPoints.length; i++) {
+      if (trailPoints[i].stroke !== trailPoints[i - 1].stroke) continue;
+      var dx = trailPoints[i].x - trailPoints[i - 1].x;
+      var dy = trailPoints[i].y - trailPoints[i - 1].y;
+      totalTrailDist += Math.sqrt(dx * dx + dy * dy);
+    }
+
     var shakeIntensity = 0;
     if (motionSamples.length > 1) {
       var diffs = [];
       for (var i = 1; i < motionSamples.length; i++) {
-        var dx = motionSamples[i].x - motionSamples[i - 1].x;
-        var dy = motionSamples[i].y - motionSamples[i - 1].y;
-        var dz = motionSamples[i].z - motionSamples[i - 1].z;
-        diffs.push(Math.sqrt(dx * dx + dy * dy + dz * dz));
+        var mdx = motionSamples[i].x - motionSamples[i - 1].x;
+        var mdy = motionSamples[i].y - motionSamples[i - 1].y;
+        var mdz = motionSamples[i].z - motionSamples[i - 1].z;
+        diffs.push(Math.sqrt(mdx * mdx + mdy * mdy + mdz * mdz));
       }
       var diffSum = 0;
       for (var i = 0; i < diffs.length; i++) diffSum += diffs[i];
       shakeIntensity = diffSum / diffs.length;
     }
 
-    // Gyroscope: tilt range
     var tiltRange = 0;
     if (orientationSamples.length > 1) {
       var betas = orientationSamples.map(function (s) { return s.beta; });
@@ -285,12 +401,10 @@
       tiltRange = betaRange + gammaRange;
     }
 
-    // Composite intensity (pressure is unreliable, so combine multiple signals)
     var intensity = 0;
     if (avgPressure > 0.1) {
       intensity = avgPressure;
     } else {
-      // Fallback: use area + hold duration as proxy
       intensity = Math.min(1, avgArea / 5000 + Math.min(avgHold / 500, 0.5));
     }
 
@@ -304,45 +418,39 @@
       sad: 0
     };
 
-    // High frequency + high intensity + shaking -> stressed
     scores.stressed += clamp01(frequency / 5) * 0.3;
     scores.stressed += clamp01(intensity) * 0.3;
     scores.stressed += clamp01(shakeIntensity / 15) * 0.4;
 
-    // High frequency + low intensity -> excited
-    scores.excited += clamp01(frequency / 4) * 0.5;
-    scores.excited += clamp01(1 - intensity) * 0.3;
+    scores.excited += clamp01(frequency / 4) * 0.4;
+    scores.excited += clamp01(1 - intensity) * 0.2;
     scores.excited += clamp01(regularity) * 0.2;
+    scores.excited += clamp01(totalTrailDist / 3000) * 0.2;
 
-    // Low frequency + low intensity -> calm
     scores.calm += clamp01(1 - frequency / 3) * 0.4;
     scores.calm += clamp01(1 - intensity) * 0.3;
     scores.calm += clamp01(1 - shakeIntensity / 10) * 0.3;
 
-    // Irregular rhythm + medium intensity -> anxious
-    scores.anxious += clamp01(1 - regularity) * 0.4;
+    scores.anxious += clamp01(1 - regularity) * 0.3;
     scores.anxious += clamp01(shakeIntensity / 10) * 0.3;
-    scores.anxious += (intensity > 0.3 && intensity < 0.7 ? 0.3 : 0);
+    scores.anxious += (intensity > 0.3 && intensity < 0.7 ? 0.2 : 0);
+    scores.anxious += clamp01(totalTrailDist / 5000) * 0.2;
 
-    // Low frequency + high intensity + stable -> focused
     scores.focused += clamp01(1 - frequency / 4) * 0.2;
     scores.focused += clamp01(intensity) * 0.3;
     scores.focused += clamp01(1 - shakeIntensity / 10) * 0.2;
     scores.focused += clamp01(regularity) * 0.3;
 
-    // Very low frequency + soft + tilting -> sad
     scores.sad += clamp01(1 - frequency / 2) * 0.3;
     scores.sad += clamp01(1 - intensity) * 0.2;
     scores.sad += clamp01(tiltRange / 60) * 0.2;
     scores.sad += clamp01(avgHold / 400) * 0.3;
 
-    // Edge case: no taps at all
     if (tapCount === 0) {
       scores.calm = 0.3;
       scores.sad = 0.7;
     }
 
-    // Find winner
     var best = 'calm';
     var bestScore = 0;
     var keys = Object.keys(scores);
@@ -362,7 +470,8 @@
         avgPressure: avgPressure.toFixed(2),
         regularity: (regularity * 100).toFixed(0),
         shakeIntensity: shakeIntensity.toFixed(1),
-        avgHold: avgHold.toFixed(0)
+        avgHold: avgHold.toFixed(0),
+        trailDist: Math.round(totalTrailDist)
       }
     };
   }
@@ -375,73 +484,73 @@
   var emotions = {
     stressed: {
       emoji: '\uD83D\uDE24',
-      title: 'Стресс',
-      description: 'Похоже, внутри накопилось напряжение. Твои тапы были резкими и частыми \u2014 тело говорит за тебя.',
+      title: '\u0421\u0442\u0440\u0435\u0441\u0441',
+      description: '\u041F\u043E\u0445\u043E\u0436\u0435, \u0432\u043D\u0443\u0442\u0440\u0438 \u043D\u0430\u043A\u043E\u043F\u0438\u043B\u043E\u0441\u044C \u043D\u0430\u043F\u0440\u044F\u0436\u0435\u043D\u0438\u0435. \u0422\u0432\u043E\u0438 \u0442\u0430\u043F\u044B \u0431\u044B\u043B\u0438 \u0440\u0435\u0437\u043A\u0438\u043C\u0438 \u0438 \u0447\u0430\u0441\u0442\u044B\u043C\u0438 \u2014 \u0442\u0435\u043B\u043E \u0433\u043E\u0432\u043E\u0440\u0438\u0442 \u0437\u0430 \u0442\u0435\u0431\u044F.',
       advice: [
-        '\uD83C\uDF2C\uFE0F Сделай 5 глубоких вдохов: 4 сек вдох, 7 сек выдох',
-        '\uD83D\uDEB6 Выйди на 10-минутную прогулку без телефона',
-        '\uD83C\uDFB5 Включи спокойную музыку и закрой глаза на 3 минуты',
-        '\u270D\uFE0F Запиши то, что тебя беспокоит \u2014 на бумаге проблемы кажутся меньше'
+        '\uD83C\uDF2C\uFE0F \u0421\u0434\u0435\u043B\u0430\u0439 5 \u0433\u043B\u0443\u0431\u043E\u043A\u0438\u0445 \u0432\u0434\u043E\u0445\u043E\u0432: 4 \u0441\u0435\u043A \u0432\u0434\u043E\u0445, 7 \u0441\u0435\u043A \u0432\u044B\u0434\u043E\u0445',
+        '\uD83D\uDEB6 \u0412\u044B\u0439\u0434\u0438 \u043D\u0430 10-\u043C\u0438\u043D\u0443\u0442\u043D\u0443\u044E \u043F\u0440\u043E\u0433\u0443\u043B\u043A\u0443 \u0431\u0435\u0437 \u0442\u0435\u043B\u0435\u0444\u043E\u043D\u0430',
+        '\uD83C\uDFB5 \u0412\u043A\u043B\u044E\u0447\u0438 \u0441\u043F\u043E\u043A\u043E\u0439\u043D\u0443\u044E \u043C\u0443\u0437\u044B\u043A\u0443 \u0438 \u0437\u0430\u043A\u0440\u043E\u0439 \u0433\u043B\u0430\u0437\u0430 \u043D\u0430 3 \u043C\u0438\u043D\u0443\u0442\u044B',
+        '\u270D\uFE0F \u0417\u0430\u043F\u0438\u0448\u0438 \u0442\u043E, \u0447\u0442\u043E \u0442\u0435\u0431\u044F \u0431\u0435\u0441\u043F\u043E\u043A\u043E\u0438\u0442 \u2014 \u043D\u0430 \u0431\u0443\u043C\u0430\u0433\u0435 \u043F\u0440\u043E\u0431\u043B\u0435\u043C\u044B \u043A\u0430\u0436\u0443\u0442\u0441\u044F \u043C\u0435\u043D\u044C\u0448\u0435'
       ],
       faceClass: 'face-stressed'
     },
     excited: {
       emoji: '\uD83E\uDD29',
-      title: 'Возбуждение / Энергия',
-      description: 'Ты полон энергии! Быстрые лёгкие тапы говорят о приподнятом настроении и драйве.',
+      title: '\u0412\u043E\u0437\u0431\u0443\u0436\u0434\u0435\u043D\u0438\u0435 / \u042D\u043D\u0435\u0440\u0433\u0438\u044F',
+      description: '\u0422\u044B \u043F\u043E\u043B\u043E\u043D \u044D\u043D\u0435\u0440\u0433\u0438\u0438! \u0411\u044B\u0441\u0442\u0440\u044B\u0435 \u043B\u0451\u0433\u043A\u0438\u0435 \u0442\u0430\u043F\u044B \u0433\u043E\u0432\u043E\u0440\u044F\u0442 \u043E \u043F\u0440\u0438\u043F\u043E\u0434\u043D\u044F\u0442\u043E\u043C \u043D\u0430\u0441\u0442\u0440\u043E\u0435\u043D\u0438\u0438 \u0438 \u0434\u0440\u0430\u0439\u0432\u0435.',
       advice: [
-        '\uD83C\uDFAF Направь энергию в дело: начни задачу, которую откладывал',
-        '\uD83C\uDFC3 Сходи на тренировку или пробежку',
-        '\uD83C\uDFA8 Попробуй что-то творческое: рисование, музыка, письмо',
-        '\uD83D\uDCAC Позвони другу и поделись хорошим настроением'
+        '\uD83C\uDFAF \u041D\u0430\u043F\u0440\u0430\u0432\u044C \u044D\u043D\u0435\u0440\u0433\u0438\u044E \u0432 \u0434\u0435\u043B\u043E: \u043D\u0430\u0447\u043D\u0438 \u0437\u0430\u0434\u0430\u0447\u0443, \u043A\u043E\u0442\u043E\u0440\u0443\u044E \u043E\u0442\u043A\u043B\u0430\u0434\u044B\u0432\u0430\u043B',
+        '\uD83C\uDFC3 \u0421\u0445\u043E\u0434\u0438 \u043D\u0430 \u0442\u0440\u0435\u043D\u0438\u0440\u043E\u0432\u043A\u0443 \u0438\u043B\u0438 \u043F\u0440\u043E\u0431\u0435\u0436\u043A\u0443',
+        '\uD83C\uDFA8 \u041F\u043E\u043F\u0440\u043E\u0431\u0443\u0439 \u0447\u0442\u043E-\u0442\u043E \u0442\u0432\u043E\u0440\u0447\u0435\u0441\u043A\u043E\u0435: \u0440\u0438\u0441\u043E\u0432\u0430\u043D\u0438\u0435, \u043C\u0443\u0437\u044B\u043A\u0430, \u043F\u0438\u0441\u044C\u043C\u043E',
+        '\uD83D\uDCAC \u041F\u043E\u0437\u0432\u043E\u043D\u0438 \u0434\u0440\u0443\u0433\u0443 \u0438 \u043F\u043E\u0434\u0435\u043B\u0438\u0441\u044C \u0445\u043E\u0440\u043E\u0448\u0438\u043C \u043D\u0430\u0441\u0442\u0440\u043E\u0435\u043D\u0438\u0435\u043C'
       ],
       faceClass: 'face-excited'
     },
     calm: {
       emoji: '\uD83D\uDE0C',
-      title: 'Спокойствие',
-      description: 'Ты в расслабленном состоянии. Мягкие, неторопливые тапы \u2014 признак внутреннего баланса.',
+      title: '\u0421\u043F\u043E\u043A\u043E\u0439\u0441\u0442\u0432\u0438\u0435',
+      description: '\u0422\u044B \u0432 \u0440\u0430\u0441\u0441\u043B\u0430\u0431\u043B\u0435\u043D\u043D\u043E\u043C \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0438. \u041C\u044F\u0433\u043A\u0438\u0435, \u043D\u0435\u0442\u043E\u0440\u043E\u043F\u043B\u0438\u0432\u044B\u0435 \u0442\u0430\u043F\u044B \u2014 \u043F\u0440\u0438\u0437\u043D\u0430\u043A \u0432\u043D\u0443\u0442\u0440\u0435\u043D\u043D\u0435\u0433\u043E \u0431\u0430\u043B\u0430\u043D\u0441\u0430.',
       advice: [
-        '\uD83E\uDDD8 Хорошее время для медитации или йоги',
-        '\uD83D\uDCD6 Почитай книгу или послушай подкаст',
-        '\u2615 Завари чай и насладись моментом',
-        '\uD83D\uDCDD Запиши 3 вещи, за которые благодарен сегодня'
+        '\uD83E\uDDD8 \u0425\u043E\u0440\u043E\u0448\u0435\u0435 \u0432\u0440\u0435\u043C\u044F \u0434\u043B\u044F \u043C\u0435\u0434\u0438\u0442\u0430\u0446\u0438\u0438 \u0438\u043B\u0438 \u0439\u043E\u0433\u0438',
+        '\uD83D\uDCD6 \u041F\u043E\u0447\u0438\u0442\u0430\u0439 \u043A\u043D\u0438\u0433\u0443 \u0438\u043B\u0438 \u043F\u043E\u0441\u043B\u0443\u0448\u0430\u0439 \u043F\u043E\u0434\u043A\u0430\u0441\u0442',
+        '\u2615 \u0417\u0430\u0432\u0430\u0440\u0438 \u0447\u0430\u0439 \u0438 \u043D\u0430\u0441\u043B\u0430\u0434\u0438\u0441\u044C \u043C\u043E\u043C\u0435\u043D\u0442\u043E\u043C',
+        '\uD83D\uDCDD \u0417\u0430\u043F\u0438\u0448\u0438 3 \u0432\u0435\u0449\u0438, \u0437\u0430 \u043A\u043E\u0442\u043E\u0440\u044B\u0435 \u0431\u043B\u0430\u0433\u043E\u0434\u0430\u0440\u0435\u043D \u0441\u0435\u0433\u043E\u0434\u043D\u044F'
       ],
       faceClass: 'face-calm'
     },
     anxious: {
       emoji: '\uD83D\uDE1F',
-      title: 'Тревога',
-      description: 'Нерегулярный ритм и лёгкая дрожь говорят о внутреннем беспокойстве. Это нормально.',
+      title: '\u0422\u0440\u0435\u0432\u043E\u0433\u0430',
+      description: '\u041D\u0435\u0440\u0435\u0433\u0443\u043B\u044F\u0440\u043D\u044B\u0439 \u0440\u0438\u0442\u043C \u0438 \u043B\u0451\u0433\u043A\u0430\u044F \u0434\u0440\u043E\u0436\u044C \u0433\u043E\u0432\u043E\u0440\u044F\u0442 \u043E \u0432\u043D\u0443\u0442\u0440\u0435\u043D\u043D\u0435\u043C \u0431\u0435\u0441\u043F\u043E\u043A\u043E\u0439\u0441\u0442\u0432\u0435. \u042D\u0442\u043E \u043D\u043E\u0440\u043C\u0430\u043B\u044C\u043D\u043E.',
       advice: [
-        '\uD83D\uDC63 Техника заземления 5-4-3-2-1: назови 5 вещей, которые видишь, 4 слышишь, 3 чувствуешь...',
-        '\uD83E\uDDF4 Сожми и разожми кулаки 10 раз \u2014 сбрось напряжение из тела',
-        '\uD83D\uDCAD Напиши тревожную мысль и рядом \u2014 самый реалистичный исход',
-        '\uD83D\uDC9A Напомни себе: тревога \u2014 это временное состояние, не факт'
+        '\uD83D\uDC63 \u0422\u0435\u0445\u043D\u0438\u043A\u0430 \u0437\u0430\u0437\u0435\u043C\u043B\u0435\u043D\u0438\u044F 5-4-3-2-1: \u043D\u0430\u0437\u043E\u0432\u0438 5 \u0432\u0435\u0449\u0435\u0439, \u043A\u043E\u0442\u043E\u0440\u044B\u0435 \u0432\u0438\u0434\u0438\u0448\u044C, 4 \u0441\u043B\u044B\u0448\u0438\u0448\u044C, 3 \u0447\u0443\u0432\u0441\u0442\u0432\u0443\u0435\u0448\u044C...',
+        '\uD83E\uDDF4 \u0421\u043E\u0436\u043C\u0438 \u0438 \u0440\u0430\u0437\u043E\u0436\u043C\u0438 \u043A\u0443\u043B\u0430\u043A\u0438 10 \u0440\u0430\u0437 \u2014 \u0441\u0431\u0440\u043E\u0441\u044C \u043D\u0430\u043F\u0440\u044F\u0436\u0435\u043D\u0438\u0435 \u0438\u0437 \u0442\u0435\u043B\u0430',
+        '\uD83D\uDCAD \u041D\u0430\u043F\u0438\u0448\u0438 \u0442\u0440\u0435\u0432\u043E\u0436\u043D\u0443\u044E \u043C\u044B\u0441\u043B\u044C \u0438 \u0440\u044F\u0434\u043E\u043C \u2014 \u0441\u0430\u043C\u044B\u0439 \u0440\u0435\u0430\u043B\u0438\u0441\u0442\u0438\u0447\u043D\u044B\u0439 \u0438\u0441\u0445\u043E\u0434',
+        '\uD83D\uDC9A \u041D\u0430\u043F\u043E\u043C\u043D\u0438 \u0441\u0435\u0431\u0435: \u0442\u0440\u0435\u0432\u043E\u0433\u0430 \u2014 \u044D\u0442\u043E \u0432\u0440\u0435\u043C\u0435\u043D\u043D\u043E\u0435 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435, \u043D\u0435 \u0444\u0430\u043A\u0442'
       ],
       faceClass: 'face-anxious'
     },
     focused: {
       emoji: '\uD83E\uDDD0',
-      title: 'Сосредоточенность',
-      description: 'Размеренные, уверенные тапы при стабильном телефоне. Ты в потоке.',
+      title: '\u0421\u043E\u0441\u0440\u0435\u0434\u043E\u0442\u043E\u0447\u0435\u043D\u043D\u043E\u0441\u0442\u044C',
+      description: '\u0420\u0430\u0437\u043C\u0435\u0440\u0435\u043D\u043D\u044B\u0435, \u0443\u0432\u0435\u0440\u0435\u043D\u043D\u044B\u0435 \u0442\u0430\u043F\u044B \u043F\u0440\u0438 \u0441\u0442\u0430\u0431\u0438\u043B\u044C\u043D\u043E\u043C \u0442\u0435\u043B\u0435\u0444\u043E\u043D\u0435. \u0422\u044B \u0432 \u043F\u043E\u0442\u043E\u043A\u0435.',
       advice: [
-        '\uD83D\uDE80 Отличное время для сложных задач \u2014 лови поток!',
-        '\uD83D\uDD07 Убери уведомления и поработай 25 минут по Помодоро',
-        '\uD83C\uDFAF Запиши главную цель на сегодня и сфокусируйся на ней',
-        '\uD83D\uDCA7 Не забудь пить воду \u2014 мозгу нужна гидратация'
+        '\uD83D\uDE80 \u041E\u0442\u043B\u0438\u0447\u043D\u043E\u0435 \u0432\u0440\u0435\u043C\u044F \u0434\u043B\u044F \u0441\u043B\u043E\u0436\u043D\u044B\u0445 \u0437\u0430\u0434\u0430\u0447 \u2014 \u043B\u043E\u0432\u0438 \u043F\u043E\u0442\u043E\u043A!',
+        '\uD83D\uDD07 \u0423\u0431\u0435\u0440\u0438 \u0443\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u044F \u0438 \u043F\u043E\u0440\u0430\u0431\u043E\u0442\u0430\u0439 25 \u043C\u0438\u043D\u0443\u0442 \u043F\u043E \u041F\u043E\u043C\u043E\u0434\u043E\u0440\u043E',
+        '\uD83C\uDFAF \u0417\u0430\u043F\u0438\u0448\u0438 \u0433\u043B\u0430\u0432\u043D\u0443\u044E \u0446\u0435\u043B\u044C \u043D\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F \u0438 \u0441\u0444\u043E\u043A\u0443\u0441\u0438\u0440\u0443\u0439\u0441\u044F \u043D\u0430 \u043D\u0435\u0439',
+        '\uD83D\uDCA7 \u041D\u0435 \u0437\u0430\u0431\u0443\u0434\u044C \u043F\u0438\u0442\u044C \u0432\u043E\u0434\u0443 \u2014 \u043C\u043E\u0437\u0433\u0443 \u043D\u0443\u0436\u043D\u0430 \u0433\u0438\u0434\u0440\u0430\u0442\u0430\u0446\u0438\u044F'
       ],
       faceClass: 'face-focused'
     },
     sad: {
       emoji: '\uD83D\uDE14',
-      title: 'Грусть / Меланхолия',
-      description: 'Медленные тапы с долгим удержанием и наклоном устройства. Похоже, на душе тяжеловато.',
+      title: '\u0413\u0440\u0443\u0441\u0442\u044C / \u041C\u0435\u043B\u0430\u043D\u0445\u043E\u043B\u0438\u044F',
+      description: '\u041C\u0435\u0434\u043B\u0435\u043D\u043D\u044B\u0435 \u0442\u0430\u043F\u044B \u0441 \u0434\u043E\u043B\u0433\u0438\u043C \u0443\u0434\u0435\u0440\u0436\u0430\u043D\u0438\u0435\u043C \u0438 \u043D\u0430\u043A\u043B\u043E\u043D\u043E\u043C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430. \u041F\u043E\u0445\u043E\u0436\u0435, \u043D\u0430 \u0434\u0443\u0448\u0435 \u0442\u044F\u0436\u0435\u043B\u043E\u0432\u0430\u0442\u043E.',
       advice: [
-        '\uD83D\uDC9B Будь мягче к себе \u2014 грустить нормально',
-        '\uD83D\uDCDE Позвони или напиши кому-то близкому',
-        '\u2600\uFE0F Выйди на свежий воздух хотя бы на 5 минут',
-        '\uD83C\uDFB6 Послушай любимую музыку или посмотри доброе видео'
+        '\uD83D\uDC9B \u0411\u0443\u0434\u044C \u043C\u044F\u0433\u0447\u0435 \u043A \u0441\u0435\u0431\u0435 \u2014 \u0433\u0440\u0443\u0441\u0442\u0438\u0442\u044C \u043D\u043E\u0440\u043C\u0430\u043B\u044C\u043D\u043E',
+        '\uD83D\uDCDE \u041F\u043E\u0437\u0432\u043E\u043D\u0438 \u0438\u043B\u0438 \u043D\u0430\u043F\u0438\u0448\u0438 \u043A\u043E\u043C\u0443-\u0442\u043E \u0431\u043B\u0438\u0437\u043A\u043E\u043C\u0443',
+        '\u2600\uFE0F \u0412\u044B\u0439\u0434\u0438 \u043D\u0430 \u0441\u0432\u0435\u0436\u0438\u0439 \u0432\u043E\u0437\u0434\u0443\u0445 \u0445\u043E\u0442\u044F \u0431\u044B \u043D\u0430 5 \u043C\u0438\u043D\u0443\u0442',
+        '\uD83C\uDFB6 \u041F\u043E\u0441\u043B\u0443\u0448\u0430\u0439 \u043B\u044E\u0431\u0438\u043C\u0443\u044E \u043C\u0443\u0437\u044B\u043A\u0443 \u0438\u043B\u0438 \u043F\u043E\u0441\u043C\u043E\u0442\u0440\u0438 \u0434\u043E\u0431\u0440\u043E\u0435 \u0432\u0438\u0434\u0435\u043E'
       ],
       faceClass: 'face-sad'
     }
@@ -466,10 +575,11 @@
     }
 
     resultStats.textContent =
-      'Тапов: ' + result.stats.tapCount +
-      ' | Частота: ' + result.stats.frequency + '/с' +
-      ' | Ритмичность: ' + result.stats.regularity + '%' +
-      (gyroAvailable ? ' | Тряска: ' + result.stats.shakeIntensity : '');
+      '\u0422\u0430\u043F\u043E\u0432: ' + result.stats.tapCount +
+      ' | \u0427\u0430\u0441\u0442\u043E\u0442\u0430: ' + result.stats.frequency + '/\u0441' +
+      ' | \u0420\u0438\u0442\u043C\u0438\u0447\u043D\u043E\u0441\u0442\u044C: ' + result.stats.regularity + '%' +
+      (result.stats.trailDist > 0 ? ' | \u0421\u043B\u0435\u0434: ' + result.stats.trailDist + 'px' : '') +
+      (gyroAvailable ? ' | \u0422\u0440\u044F\u0441\u043A\u0430: ' + result.stats.shakeIntensity : '');
   }
 
   // --- Utils ---
@@ -491,11 +601,21 @@
     startSession();
   });
 
-  faceContainer.addEventListener('pointerdown', onPointerDown);
-  faceContainer.addEventListener('pointerup', onPointerUp);
+  doneBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (sessionActive) endSession();
+  });
 
-  // Prevent context menu on long press
-  faceContainer.addEventListener('contextmenu', function (e) {
+  tapArea.addEventListener('pointerdown', onPointerDown);
+  tapArea.addEventListener('pointermove', onPointerMove);
+  tapArea.addEventListener('pointerup', onPointerUp);
+  tapArea.addEventListener('pointercancel', onPointerUp);
+
+  tapArea.addEventListener('contextmenu', function (e) {
     e.preventDefault();
+  });
+
+  window.addEventListener('resize', function () {
+    if (sessionActive) resizeCanvas();
   });
 })();

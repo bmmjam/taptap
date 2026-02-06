@@ -12,23 +12,26 @@
     <div id="intro-screen">
       <h1>TapTap</h1>
       <p class="subtitle">Узнай своё эмоциональное состояние</p>
-      <p class="hint">Тапай по смайлику так, как чувствуешь.<br>У тебя 5 секунд.</p>
+      <p class="hint">Тапай, води пальцем, делай что чувствуешь.<br>Когда будешь готов — нажми кнопку.</p>
       <button id="start-btn">Начать</button>
     </div>
 
     <div id="tap-screen" class="hidden">
-      <div id="timer-bar"><div id="timer-fill"></div></div>
-      <div id="face-container">
-        <svg id="face" viewBox="0 0 200 200" width="200" height="200">
-          <circle id="face-bg" cx="100" cy="100" r="95" fill="#FFD93D" stroke="#E8B830" stroke-width="3"/>
-          <ellipse id="eye-left" cx="70" cy="82" rx="8" ry="10" fill="#333"/>
-          <ellipse id="eye-right" cx="130" cy="82" rx="8" ry="10" fill="#333"/>
-          <path id="mouth" d="M 60 125 Q 100 160 140 125" stroke="#333" stroke-width="4" fill="none" stroke-linecap="round"/>
-        </svg>
-        <div id="pulse-ring"></div>
+      <canvas id="trail-canvas"></canvas>
+      <div id="tap-area">
+        <div id="face-container">
+          <svg id="face" viewBox="0 0 200 200" width="200" height="200">
+            <circle id="face-bg" cx="100" cy="100" r="95" fill="#FFD93D" stroke="#E8B830" stroke-width="3"/>
+            <ellipse id="eye-left" cx="70" cy="82" rx="8" ry="10" fill="#333"/>
+            <ellipse id="eye-right" cx="130" cy="82" rx="8" ry="10" fill="#333"/>
+            <path id="mouth" d="M 60 125 Q 100 160 140 125" stroke="#333" stroke-width="4" fill="none" stroke-linecap="round"/>
+          </svg>
+          <div id="pulse-ring"></div>
+        </div>
+        <p id="tap-counter">0 тапов</p>
+        <p class="hint" id="gyro-hint"></p>
       </div>
-      <p id="tap-counter">0 тапов</p>
-      <p class="hint" id="gyro-hint"></p>
+      <button id="done-btn">Готово</button>
     </div>
 
     <div id="result-screen" class="hidden">
