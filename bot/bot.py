@@ -1,10 +1,9 @@
 import os
-import asyncio
 import json
+import asyncio
 from datetime import datetime
-from aiohttp import web
 from aiogram import Bot, Dispatcher, types
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, Command
 from aiogram.types import (
     MenuButtonWebApp, WebAppInfo,
     ReplyKeyboardMarkup, KeyboardButton,
@@ -12,7 +11,6 @@ from aiogram.types import (
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 WEBAPP_URL = os.environ.get("WEBAPP_URL", "")
-API_URL = os.environ.get("API_URL", "")
 
 if not BOT_TOKEN:
     raise SystemExit("BOT_TOKEN is not set")
@@ -20,86 +18,80 @@ if not BOT_TOKEN:
 if not WEBAPP_URL:
     raise SystemExit("WEBAPP_URL is not set")
 
-if not API_URL:
-    raise SystemExit("API_URL is not set.\n"
-                     "Run ngrok: ngrok http 8080\n"
-                     "Then: export API_URL='https://xxxx.ngrok-free.app'")
-
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 # --- In-memory results storage ---
-results = []  # [{name, emotion, emoji, stats, timestamp}, ...]
+results = {}  # user_id -> {name, emotion, emoji, title, stats, timestamp}
+
+EMOTION_TITLES = {
+    "stressed": "Стресс",
+    "excited": "Энергия",
+    "calm": "Спокойствие",
+    "anxious": "Тревога",
+    "focused": "Фокус",
+    "sad": "Грусть",
+}
 
 
-# --- API handlers ---
-async def handle_post_result(request):
-    try:
-        data = await request.json()
-        name = data.get("name", "Аноним")
-        emotion = data.get("emotion", "")
-        emoji = data.get("emoji", "")
-        stats = data.get("stats", {})
+def build_group_summary():
+    if not results:
+        return "\U0001F465 Пока никто не прошёл тест."
 
-        # Replace existing result for the same user
-        for i, r in enumerate(results):
-            if r["name"] == name:
-                results[i] = {
-                    "name": name,
-                    "emotion": emotion,
-                    "emoji": emoji,
-                    "stats": stats,
-                    "timestamp": datetime.now().isoformat(),
-                }
-                return web.json_response({"ok": True, "updated": True})
+    members = list(results.values())
+    total = len(members)
 
-        results.append({
-            "name": name,
-            "emotion": emotion,
-            "emoji": emoji,
-            "stats": stats,
-            "timestamp": datetime.now().isoformat(),
-        })
-        return web.json_response({"ok": True, "updated": False})
-    except Exception as e:
-        return web.json_response({"ok": False, "error": str(e)}, status=400)
+    # Count emotions
+    counts = {}
+    for m in members:
+        counts[m["emotion"]] = counts.get(m["emotion"], 0) + 1
 
+    # Dominant emotion
+    dominant = max(counts, key=counts.get)
+    dominant_emoji = members[0]["emoji"]
+    for m in members:
+        if m["emotion"] == dominant:
+            dominant_emoji = m["emoji"]
+            break
 
-async def handle_get_results(request):
-    return web.json_response({"results": results, "count": len(results)})
+    lines = []
+    lines.append("\U0001F465 **Обстановка в группе** (" + str(total) + " чел.)\n")
+    lines.append(dominant_emoji + " Общее настроение: **" +
+                 EMOTION_TITLES.get(dominant, dominant) + "**\n")
 
+    # Bars
+    bar_full = "\u2588"
+    bar_empty = "\u2591"
+    for emotion in ["stressed", "excited", "calm", "anxious", "focused", "sad"]:
+        count = counts.get(emotion, 0)
+        if count == 0:
+            continue
+        pct = round(count / total * 100)
+        bar_len = max(1, round(count / total * 10))
+        bar = bar_full * bar_len + bar_empty * (10 - bar_len)
+        emoji_map = {
+            "stressed": "\U0001F624", "excited": "\U0001F929",
+            "calm": "\U0001F60C", "anxious": "\U0001F61F",
+            "focused": "\U0001F9D0", "sad": "\U0001F614",
+        }
+        lines.append(emoji_map.get(emotion, "") + " " + bar + " " +
+                     str(pct) + "% " + EMOTION_TITLES.get(emotion, emotion))
 
-async def handle_reset(request):
-    results.clear()
-    return web.json_response({"ok": True})
+    lines.append("\n\U0001F4CB **Участники:**")
+    for m in members:
+        lines.append(m["emoji"] + " " + m["name"] + " — " +
+                     EMOTION_TITLES.get(m["emotion"], m["emotion"]))
 
-
-async def handle_options(request):
-    return web.Response(status=200)
-
-
-@web.middleware
-async def cors_middleware(request, handler):
-    if request.method == "OPTIONS":
-        resp = web.Response(status=200)
-    else:
-        resp = await handler(request)
-    resp.headers["Access-Control-Allow-Origin"] = "*"
-    resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
-    return resp
+    return "\n".join(lines)
 
 
-# --- Bot handlers ---
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
-    webapp_url = WEBAPP_URL + "?api=" + API_URL
-
     await bot.set_chat_menu_button(
         chat_id=message.chat.id,
         menu_button=MenuButtonWebApp(
             text="TapTap",
-            web_app=WebAppInfo(url=webapp_url),
+            web_app=WebAppInfo(url=WEBAPP_URL),
         ),
     )
 
@@ -107,7 +99,7 @@ async def cmd_start(message: types.Message):
         keyboard=[
             [KeyboardButton(
                 text="\U0001F60A Узнать моё состояние",
-                web_app=WebAppInfo(url=webapp_url),
+                web_app=WebAppInfo(url=WEBAPP_URL),
             )]
         ],
         resize_keyboard=True,
@@ -115,29 +107,59 @@ async def cmd_start(message: types.Message):
     await message.answer(
         "\U0001F44B Привет! Я **TapTap** — помогу понять, что ты сейчас чувствуешь.\n\n"
         "Нажми кнопку внизу \u2014 потапай по смайлику, "
-        "и увидишь свой результат и общую обстановку группы.",
+        "и увидишь свой результат.\n\n"
+        "Команда /group \u2014 общая обстановка группы\n"
+        "Команда /reset \u2014 сбросить результаты",
         reply_markup=keyboard,
         parse_mode="Markdown",
     )
 
 
+@dp.message(Command("group"))
+async def cmd_group(message: types.Message):
+    await message.answer(build_group_summary(), parse_mode="Markdown")
+
+
+@dp.message(Command("reset"))
+async def cmd_reset(message: types.Message):
+    results.clear()
+    await message.answer("\u2705 Результаты сброшены. Можно начинать новый раунд!")
+
+
+@dp.message(lambda m: m.web_app_data is not None)
+async def handle_webapp_data(message: types.Message):
+    try:
+        data = json.loads(message.web_app_data.data)
+        emotion = data.get("emotion", "calm")
+        emoji_map = {
+            "stressed": "\U0001F624", "excited": "\U0001F929",
+            "calm": "\U0001F60C", "anxious": "\U0001F61F",
+            "focused": "\U0001F9D0", "sad": "\U0001F614",
+        }
+        emoji = emoji_map.get(emotion, "\U0001F60C")
+        user_id = message.from_user.id
+        name = message.from_user.first_name or "Аноним"
+
+        results[user_id] = {
+            "name": name,
+            "emotion": emotion,
+            "emoji": emoji,
+            "stats": data.get("stats", {}),
+            "timestamp": datetime.now().isoformat(),
+        }
+
+        title = EMOTION_TITLES.get(emotion, emotion)
+        await message.answer(
+            emoji + " **" + name + "**, твоё состояние: **" + title + "**\n\n"
+            "Сейчас в группе " + str(len(results)) + " чел. "
+            "Напиши /group чтобы увидеть общую обстановку.",
+            parse_mode="Markdown",
+        )
+    except Exception:
+        await message.answer("Не удалось обработать результат.")
+
+
 async def main():
-    # Start aiohttp web server
-    app = web.Application(middlewares=[cors_middleware])
-    app.router.add_post("/api/result", handle_post_result)
-    app.router.add_get("/api/results", handle_get_results)
-    app.router.add_post("/api/reset", handle_reset)
-    app.router.add_route("OPTIONS", "/api/result", handle_options)
-    app.router.add_route("OPTIONS", "/api/results", handle_options)
-    app.router.add_route("OPTIONS", "/api/reset", handle_options)
-
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", 8080)
-    await site.start()
-    print("API server started on http://0.0.0.0:8080")
-
-    # Start bot polling
     print("Bot started. Press Ctrl+C to stop.")
     await dp.start_polling(bot)
 

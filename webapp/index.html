@@ -12,11 +12,12 @@
     <div id="intro-screen">
       <h1>TapTap</h1>
       <p class="subtitle">Узнай своё эмоциональное состояние</p>
-      <p class="hint">Тапай, води пальцем, делай что чувствуешь.<br>Когда будешь готов — нажми кнопку.</p>
+      <p class="hint">Тапай, води пальцем, делай что чувствуешь.<br>У тебя 30 секунд или нажми «Готово».</p>
       <button id="start-btn">Начать</button>
     </div>
 
     <div id="tap-screen" class="hidden">
+      <div id="timer-bar"><div id="timer-fill"></div></div>
       <canvas id="trail-canvas"></canvas>
       <div id="tap-area">
         <div id="face-container">
@@ -53,19 +54,9 @@
           <ul id="advice-list"></ul>
         </div>
         <div id="result-stats"></div>
-        <button id="group-btn">Общая обстановка</button>
+        <button id="send-btn">Отправить в группу</button>
         <button id="retry-btn" class="secondary">Попробовать ещё раз</button>
       </div>
-    </div>
-
-    <div id="group-screen" class="hidden">
-      <h2 id="group-title">Обстановка в группе</h2>
-      <div id="group-mood"></div>
-      <div id="group-bars"></div>
-      <div id="group-members"></div>
-      <p id="group-count"></p>
-      <button id="back-btn">Назад к результату</button>
-      <button id="retry-btn-group" class="secondary">Попробовать ещё раз</button>
     </div>
   </div>
 
