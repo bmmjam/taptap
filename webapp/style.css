@@ -136,3 +136,48 @@ button.secondary {
 .face-anxious #face-bg { fill: #DA77F2; }
 .face-focused #face-bg { fill: #74C0FC; }
 .face-sad #face-bg { fill: #748FFC; }
+
+/* Group Dashboard */
+#group-screen {
+  text-align: center; width: 100%; max-width: 400px;
+  animation: fadeIn 0.5s ease; overflow-y: auto; max-height: 100vh;
+  padding-bottom: 20px;
+}
+#group-title {
+  font-size: 24px; margin-bottom: 8px;
+  background: linear-gradient(135deg, #FFD93D, #FF6B6B);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+#group-count { font-size: 14px; opacity: 0.5; margin-bottom: 12px; }
+#group-dominant { margin-bottom: 16px; font-size: 16px; line-height: 1.6; }
+#group-error { color: #FF6B6B; font-size: 13px; min-height: 0; margin-bottom: 8px; }
+
+.chart-container {
+  background: rgba(255,255,255,0.04); border-radius: 16px;
+  padding: 16px; margin-bottom: 16px;
+}
+.chart-label {
+  font-size: 12px; opacity: 0.5; text-transform: uppercase;
+  letter-spacing: 0.5px; margin-bottom: 8px;
+}
+
+.members-title {
+  font-size: 14px; opacity: 0.5; text-transform: uppercase;
+  letter-spacing: 0.5px; margin: 16px 0 8px; text-align: left;
+}
+#members-list { text-align: left; margin-bottom: 20px; }
+
+.member-card {
+  background: rgba(255,255,255,0.04); border-radius: 12px;
+  padding: 12px 14px; margin-bottom: 8px; border-left: 3px solid #888;
+}
+.member-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.member-emoji { font-size: 22px; }
+.member-name { font-weight: 600; font-size: 15px; flex: 1; }
+.member-emotion { font-size: 13px; opacity: 0.7; }
+.member-stats {
+  display: flex; flex-wrap: wrap; gap: 2px 10px;
+  font-size: 12px; opacity: 0.5;
+}
+.member-time { font-size: 11px; opacity: 0.3; margin-top: 4px; }
+.no-members { text-align: center; opacity: 0.5; padding: 20px; }

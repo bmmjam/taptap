@@ -1,16 +1,23 @@
 (function () {
   'use strict';
 
-  var MAX_DURATION = 30000;
+  var MAX_DURATION = 6000;
+
+  // --- API URL from query params ---
+  var params = new URLSearchParams(window.location.search);
+  var API_URL = params.get('api') || '';
 
   // --- DOM ---
   var introScreen = document.getElementById('intro-screen');
   var tapScreen = document.getElementById('tap-screen');
   var resultScreen = document.getElementById('result-screen');
+  var groupScreen = document.getElementById('group-screen');
   var startBtn = document.getElementById('start-btn');
   var retryBtn = document.getElementById('retry-btn');
-  var sendBtn = document.getElementById('send-btn');
+  var groupBtn = document.getElementById('group-btn');
   var doneBtn = document.getElementById('done-btn');
+  var backResultBtn = document.getElementById('back-result-btn');
+  var groupRetryBtn = document.getElementById('group-retry-btn');
   var tapArea = document.getElementById('tap-area');
   var face = document.getElementById('face');
   var pulseRing = document.getElementById('pulse-ring');
@@ -35,7 +42,6 @@
   var motionSamples = [];
   var orientationSamples = [];
   var gyroAvailable = false;
-  var autoEndTimer = null;
   var timerInterval = null;
   var isDown = false;
   var trailPoints = [];
@@ -43,10 +49,20 @@
   var trailHue = 45;
   var strokeId = 0;
   var lastResult = null;
+  var emotionChart = null;
+  var tapsChart = null;
+  var pollTimer = null;
 
   // --- Telegram ---
   var tg = window.Telegram && window.Telegram.WebApp;
   if (tg) { tg.ready(); tg.expand(); }
+
+  var userName = 'Аноним';
+  var userId = 'anon_' + Math.random().toString(36).slice(2, 8);
+  if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
+    userName = tg.initDataUnsafe.user.first_name || 'Аноним';
+    userId = String(tg.initDataUnsafe.user.id);
+  }
 
   // --- Canvas ---
   function resizeCanvas() {
@@ -156,6 +172,7 @@
     taps = []; motionSamples = []; orientationSamples = []; trailPoints = [];
     strokeId = 0; isDown = false; trailHue = 45;
     sessionActive = true; sessionStart = Date.now(); lastResult = null;
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
     hideAll(); tapScreen.classList.remove('hidden');
     resizeCanvas(); ctx.clearRect(0, 0, trailCanvas.width, trailCanvas.height);
     tapCounter.textContent = '0 тапов'; timerFill.style.width = '100%';
@@ -177,6 +194,7 @@
     setTimeout(function () {
       lastResult = analyze();
       showResult(lastResult);
+      sendResultToAPI(lastResult);
     }, 1500);
   }
 
@@ -184,13 +202,22 @@
     introScreen.classList.add('hidden');
     tapScreen.classList.add('hidden');
     resultScreen.classList.add('hidden');
+    groupScreen.classList.add('hidden');
   }
 
-  // --- Send to bot via sendData ---
-  function sendToBot(result) {
-    if (tg && tg.sendData) {
-      tg.sendData(JSON.stringify({ emotion: result.emotion, stats: result.stats }));
-    }
+  // --- Send result to API ---
+  function sendResultToAPI(result) {
+    if (!API_URL) return;
+    fetch(API_URL + '/api/result', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: userId,
+        name: userName,
+        emotion: result.emotion,
+        stats: result.stats,
+      }),
+    }).catch(function () {});
   }
 
   // --- Analysis ---
@@ -198,7 +225,7 @@
     var downs = taps.filter(function (t) { return t.type === 'down'; });
     var tapCount = downs.length;
     var dur = (Date.now() - sessionStart) / 1000;
-    var freq = tapCount / dur;
+    var freq = tapCount / Math.max(dur, 0.1);
     var avgP = 0;
     if (tapCount > 0) { var s = 0; for (var i = 0; i < downs.length; i++) s += downs[i].pressure; avgP = s / tapCount; }
     var avgArea = 0;
@@ -248,8 +275,9 @@
     var best = 'calm', bs = 0, k = Object.keys(sc);
     for (var i = 0; i < k.length; i++) { if (sc[k[i]] > bs) { bs = sc[k[i]]; best = k[i]; } }
     return { emotion: best, scores: sc, stats: {
-      tapCount: tapCount, frequency: freq.toFixed(1), regularity: (reg*100).toFixed(0),
-      shakeIntensity: shake.toFixed(1), avgHold: avgHold.toFixed(0), trailDist: Math.round(tDist)
+      tapCount: tapCount, duration: dur.toFixed(1), frequency: freq.toFixed(1),
+      regularity: (reg*100).toFixed(0), avgHold: avgHold.toFixed(0),
+      shakeIntensity: shake.toFixed(1), trailDist: Math.round(tDist),
     }};
   }
   function cl(v) { return Math.max(0, Math.min(1, v)); }
@@ -279,9 +307,144 @@
     resultDescription.textContent = e.description;
     adviceList.innerHTML = '';
     for (var i = 0; i < e.advice.length; i++) { var li = document.createElement('li'); li.textContent = e.advice[i]; adviceList.appendChild(li); }
-    resultStats.textContent = 'Тапов: ' + result.stats.tapCount + ' | Частота: ' + result.stats.frequency + '/с | Ритмичность: ' + result.stats.regularity + '%'
-      + (result.stats.trailDist > 0 ? ' | След: ' + result.stats.trailDist + 'px' : '')
-      + (gyroAvailable ? ' | Тряска: ' + result.stats.shakeIntensity : '');
+    var st = result.stats;
+    resultStats.textContent = 'Тапов: ' + st.tapCount + ' | ' + st.duration + 'с'
+      + ' | Частота: ' + st.frequency + '/с | Ритм: ' + st.regularity + '%'
+      + (st.trailDist > 0 ? ' | След: ' + st.trailDist + 'px' : '')
+      + (gyroAvailable ? ' | Тряска: ' + st.shakeIntensity : '');
+    groupBtn.style.display = API_URL ? '' : 'none';
+  }
+
+  // --- Group Dashboard ---
+  function showGroupScreen() {
+    hideAll();
+    groupScreen.classList.remove('hidden');
+    fetchGroupResults();
+    pollTimer = setInterval(fetchGroupResults, 3000);
+  }
+
+  function fetchGroupResults() {
+    if (!API_URL) return;
+    document.getElementById('group-error').textContent = '';
+    fetch(API_URL + '/api/results')
+      .then(function (r) { return r.json(); })
+      .then(renderGroupDashboard)
+      .catch(function () {
+        document.getElementById('group-error').textContent = 'Нет связи с сервером';
+      });
+  }
+
+  function renderGroupDashboard(data) {
+    var countEl = document.getElementById('group-count');
+    var domEl = document.getElementById('group-dominant');
+    var errEl = document.getElementById('group-error');
+    errEl.textContent = '';
+
+    countEl.textContent = data.count + ' ' + pluralize(data.count, 'участник', 'участника', 'участников');
+
+    if (data.count > 0) {
+      domEl.innerHTML = '<span style="font-size:48px">' + esc(data.dominant_emoji) + '</span><br>' +
+        'Общее настроение: <strong>' + esc(data.dominant_title) + '</strong>';
+    } else {
+      domEl.innerHTML = '<span style="opacity:0.5">Пока никто не прошёл тест</span>';
+    }
+
+    renderEmotionChart(data);
+    renderTapsChart(data);
+    renderMembersList(data);
+  }
+
+  function renderEmotionChart(data) {
+    var wrap = document.getElementById('emotion-chart-wrap');
+    var canvas = document.getElementById('emotion-chart');
+    var labels = [], values = [], colors = [];
+    var counts = data.emotion_counts || {};
+    var titles = data.emotion_titles || {};
+    var colorMap = data.emotion_colors || {};
+    var order = ['stressed', 'excited', 'calm', 'anxious', 'focused', 'sad'];
+    for (var i = 0; i < order.length; i++) {
+      if (counts[order[i]]) {
+        labels.push(titles[order[i]] || order[i]);
+        values.push(counts[order[i]]);
+        colors.push(colorMap[order[i]] || '#888');
+      }
+    }
+    if (emotionChart) emotionChart.destroy();
+    if (values.length === 0) { wrap.style.display = 'none'; return; }
+    wrap.style.display = '';
+    emotionChart = new Chart(canvas, {
+      type: 'doughnut',
+      data: { labels: labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0 }] },
+      options: {
+        responsive: true, maintainAspectRatio: true,
+        plugins: { legend: { position: 'bottom', labels: { color: '#eee', font: { size: 13 }, padding: 12 } } }
+      }
+    });
+  }
+
+  function renderTapsChart(data) {
+    var wrap = document.getElementById('taps-chart-wrap');
+    var canvas = document.getElementById('taps-chart');
+    var labels = [], values = [], colors = [];
+    var colorMap = data.emotion_colors || {};
+    var members = data.results || [];
+    for (var i = 0; i < members.length; i++) {
+      labels.push(members[i].name);
+      values.push(members[i].stats ? (members[i].stats.tapCount || 0) : 0);
+      colors.push(colorMap[members[i].emotion] || '#888');
+    }
+    if (tapsChart) tapsChart.destroy();
+    if (values.length === 0) { wrap.style.display = 'none'; return; }
+    wrap.style.display = '';
+    tapsChart = new Chart(canvas, {
+      type: 'bar',
+      data: { labels: labels, datasets: [{ label: 'Тапы', data: values, backgroundColor: colors, borderRadius: 6 }] },
+      options: {
+        responsive: true, maintainAspectRatio: true, indexAxis: 'y',
+        scales: {
+          x: { ticks: { color: '#aaa' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+          y: { ticks: { color: '#eee', font: { size: 13 } }, grid: { display: false } }
+        },
+        plugins: { legend: { display: false } }
+      }
+    });
+  }
+
+  function renderMembersList(data) {
+    var container = document.getElementById('members-list');
+    var members = data.results || [];
+    var titles = data.emotion_titles || {};
+    var colorMap = data.emotion_colors || {};
+    var html = '';
+    for (var i = 0; i < members.length; i++) {
+      var m = members[i];
+      var s = m.stats || {};
+      var color = colorMap[m.emotion] || '#888';
+      var time = '';
+      if (m.timestamp) {
+        var d = new Date(m.timestamp);
+        time = pad(d.getHours()) + ':' + pad(d.getMinutes());
+      }
+      html += '<div class="member-card" style="border-left-color:' + color + '">' +
+        '<div class="member-header">' +
+          '<span class="member-emoji">' + esc(m.emoji) + '</span>' +
+          '<span class="member-name">' + esc(m.name) + '</span>' +
+          '<span class="member-emotion">' + esc(titles[m.emotion] || m.emotion) + '</span>' +
+        '</div>' +
+        '<div class="member-stats">' +
+          '<span>' + (s.tapCount || 0) + ' тапов</span>' +
+          '<span>' + (s.frequency || '0') + '/с</span>' +
+          '<span>Ритм ' + (s.regularity || '0') + '%</span>' +
+          '<span>Удерж ' + (s.avgHold || '0') + 'мс</span>' +
+          (s.duration ? '<span>' + s.duration + 'с</span>' : '') +
+          (s.trailDist ? '<span>След ' + s.trailDist + 'px</span>' : '') +
+          (s.shakeIntensity && s.shakeIntensity !== '0.0' ? '<span>Тряска ' + s.shakeIntensity + '</span>' : '') +
+        '</div>' +
+        (time ? '<div class="member-time">' + time + '</div>' : '') +
+      '</div>';
+    }
+    if (members.length === 0) html = '<p class="no-members">Пока никто не прошёл тест</p>';
+    container.innerHTML = html;
   }
 
   // --- Utils ---
@@ -291,12 +454,25 @@
     if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
     return many;
   }
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+  function esc(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
 
   // --- Events ---
-  startBtn.addEventListener('click', function () { startSession(); });
-  retryBtn.addEventListener('click', function () { startSession(); });
+  startBtn.addEventListener('click', startSession);
+  retryBtn.addEventListener('click', startSession);
   doneBtn.addEventListener('click', function (e) { e.stopPropagation(); if (sessionActive) endSession(); });
-  sendBtn.addEventListener('click', function () { if (lastResult) sendToBot(lastResult); });
+  groupBtn.addEventListener('click', showGroupScreen);
+  backResultBtn.addEventListener('click', function () {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    hideAll(); resultScreen.classList.remove('hidden');
+  });
+  groupRetryBtn.addEventListener('click', function () {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    startSession();
+  });
   tapArea.addEventListener('pointerdown', onPointerDown);
   tapArea.addEventListener('pointermove', onPointerMove);
   tapArea.addEventListener('pointerup', onPointerUp);
