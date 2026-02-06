@@ -9,6 +9,8 @@
 
   // --- DOM ---
   var introScreen = document.getElementById('intro-screen');
+  var countdownScreen = document.getElementById('countdown-screen');
+  var countdownNumber = document.getElementById('countdown-number');
   var tapScreen = document.getElementById('tap-screen');
   var resultScreen = document.getElementById('result-screen');
   var groupScreen = document.getElementById('group-screen');
@@ -200,9 +202,33 @@
 
   function hideAll() {
     introScreen.classList.add('hidden');
+    countdownScreen.classList.add('hidden');
     tapScreen.classList.add('hidden');
     resultScreen.classList.add('hidden');
     groupScreen.classList.add('hidden');
+  }
+
+  // --- Countdown 3-2-1 ---
+  function startCountdown() {
+    hideAll();
+    countdownScreen.classList.remove('hidden');
+    var count = 3;
+    countdownNumber.textContent = count;
+    countdownNumber.style.animation = 'none';
+    void countdownNumber.offsetWidth;
+    countdownNumber.style.animation = 'countPop 0.8s ease-in-out';
+    var iv = setInterval(function () {
+      count--;
+      if (count > 0) {
+        countdownNumber.textContent = count;
+        countdownNumber.style.animation = 'none';
+        void countdownNumber.offsetWidth;
+        countdownNumber.style.animation = 'countPop 0.8s ease-in-out';
+      } else {
+        clearInterval(iv);
+        startSession();
+      }
+    }, 1000);
   }
 
   // --- Send result to API ---
@@ -461,8 +487,8 @@
   }
 
   // --- Events ---
-  startBtn.addEventListener('click', startSession);
-  retryBtn.addEventListener('click', startSession);
+  startBtn.addEventListener('click', startCountdown);
+  retryBtn.addEventListener('click', startCountdown);
   doneBtn.addEventListener('click', function (e) { e.stopPropagation(); if (sessionActive) endSession(); });
   groupBtn.addEventListener('click', showGroupScreen);
   backResultBtn.addEventListener('click', function () {
@@ -471,7 +497,7 @@
   });
   groupRetryBtn.addEventListener('click', function () {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-    startSession();
+    startCountdown();
   });
   tapArea.addEventListener('pointerdown', onPointerDown);
   tapArea.addEventListener('pointermove', onPointerMove);
