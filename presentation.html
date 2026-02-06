@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TapTap Presentation</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f0f1a; color: #fff; overflow: hidden; }
+
+.slide {
+  display: none; width: 100vw; height: 100vh;
+  flex-direction: column; align-items: center; justify-content: center;
+  padding: 60px;
+}
+.slide.active { display: flex; }
+
+/* Slide 1 */
+.slide-1 { background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 100%); }
+.hamster { font-size: 120px; margin-bottom: 20px; animation: bounce 2s ease-in-out infinite; }
+@keyframes bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-15px); } }
+.title { font-size: 72px; font-weight: 800; margin-bottom: 16px; background: linear-gradient(135deg, #FFD93D, #FF6B6B); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.offer { font-size: 32px; opacity: 0.7; margin-bottom: 48px; text-align: center; line-height: 1.4; }
+.stats-row { display: flex; gap: 40px; margin-top: 10px; }
+.stat-card {
+  background: rgba(255,255,255,0.06); border-radius: 20px; padding: 28px 36px;
+  text-align: center; min-width: 180px;
+}
+.stat-number { font-size: 48px; font-weight: 800; }
+.stat-number.stress { color: #FF6B6B; }
+.stat-number.energy { color: #FFA94D; }
+.stat-number.calm { color: #69DB7C; }
+.stat-label { font-size: 18px; opacity: 0.5; margin-top: 6px; }
+
+/* Slide 2 */
+.slide-2 { background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 100%); }
+.qr-title { font-size: 48px; font-weight: 700; margin-bottom: 40px; text-align: center; }
+.qr-placeholder {
+  width: 360px; height: 360px; border-radius: 24px;
+  border: 3px dashed rgba(255,255,255,0.2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; opacity: 0.3; margin-bottom: 32px;
+  background: rgba(255,255,255,0.03);
+}
+.qr-hint { font-size: 24px; opacity: 0.5; }
+
+/* Navigation */
+.nav-hint {
+  position: fixed; bottom: 20px; right: 30px;
+  font-size: 14px; opacity: 0.2;
+}
+.slide-counter {
+  position: fixed; bottom: 20px; left: 30px;
+  font-size: 14px; opacity: 0.2;
+}
+</style>
+</head>
+<body>
+
+<div class="slide slide-1 active">
+  <div class="hamster">🐹</div>
+  <div class="title">Тапни хомяка</div>
+  <div class="offer">Тапай 6 секунд — узнай обстановку вокруг</div>
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-number stress">42%</div>
+      <div class="stat-label">Стресс</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number energy">35%</div>
+      <div class="stat-label">Энергия</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number calm">23%</div>
+      <div class="stat-label">Спокойствие</div>
+    </div>
+  </div>
+</div>
+
+<div class="slide slide-2">
+  <div class="hamster" style="font-size:80px; margin-bottom: 12px;">🐹</div>
+  <div class="qr-title">Открой бота и тапни!</div>
+  <img src="qr.png" width="360" height="360" style="border-radius:24px">
+  <div class="qr-hint">Наведи камеру на QR-код</div>
+</div>
+
+<div class="slide-counter" id="counter">1 / 2</div>
+<div class="nav-hint">← →</div>
+
+<script>
+var slides = document.querySelectorAll('.slide');
+var current = 0;
+var counter = document.getElementById('counter');
+function show(n) {
+  slides[current].classList.remove('active');
+  current = (n + slides.length) % slides.length;
+  slides[current].classList.add('active');
+  counter.textContent = (current + 1) + ' / ' + slides.length;
+}
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'ArrowRight' || e.key === ' ') show(current + 1);
+  if (e.key === 'ArrowLeft') show(current - 1);
+});
+document.addEventListener('click', function() { show(current + 1); });
+</script>
+</body>
+</html>
