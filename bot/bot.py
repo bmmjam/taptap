@@ -9,6 +9,7 @@ from aiogram.filters import CommandStart, Command
 from aiogram.types import (
     MenuButtonWebApp, WebAppInfo,
     ReplyKeyboardMarkup, KeyboardButton,
+    BotCommand,
 )
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
@@ -220,6 +221,10 @@ async def start_api():
 
 async def main():
     print("Starting TapTap bot + API server...")
+    await bot.set_my_commands([
+        BotCommand(command="start", description="Запустить бота"),
+        BotCommand(command="group", description="Общая обстановка группы"),
+    ])
     await start_api()
     await dp.start_polling(bot)
 
