@@ -56,7 +56,7 @@ body {
   margin-bottom: 24px;
 }
 
-#start-btn, #retry-btn, #done-btn {
+button {
   background: var(--tg-theme-button-color, #FFD93D);
   color: var(--tg-theme-button-text-color, #1a1a2e);
   border: none;
@@ -66,11 +66,20 @@ body {
   font-weight: 600;
   cursor: pointer;
   transition: transform 0.15s ease, opacity 0.15s ease;
+  width: 100%;
+  max-width: 360px;
 }
 
-#start-btn:active, #retry-btn:active, #done-btn:active {
+button:active {
   transform: scale(0.95);
   opacity: 0.8;
+}
+
+button.secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--tg-theme-text-color, #eee);
+  margin-top: 10px;
+  font-size: 16px;
 }
 
 /* Tap Screen */
@@ -176,6 +185,7 @@ body {
   padding: 12px 40px;
   font-size: 16px;
   opacity: 0.85;
+  width: auto;
 }
 
 /* Result Screen */
@@ -268,8 +278,118 @@ body {
   margin-bottom: 24px;
 }
 
-#retry-btn {
+/* Group Screen */
+#group-screen {
+  text-align: center;
   width: 100%;
+  max-width: 360px;
+  animation: fadeIn 0.5s ease;
+  overflow-y: auto;
+  max-height: 100vh;
+}
+
+#group-title {
+  font-size: 22px;
+  margin-bottom: 16px;
+}
+
+#group-mood {
+  font-size: 48px;
+  margin-bottom: 4px;
+}
+
+#group-mood .mood-label {
+  font-size: 18px;
+  opacity: 0.8;
+  display: block;
+  margin-bottom: 16px;
+}
+
+#group-bars {
+  margin-bottom: 20px;
+}
+
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.bar-label {
+  width: 28px;
+  font-size: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.bar-track {
+  flex: 1;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 12px;
+  transition: width 0.5s ease;
+  min-width: 0;
+}
+
+.bar-fill.stressed { background: #FF6B6B; }
+.bar-fill.excited { background: #FFA94D; }
+.bar-fill.calm { background: #69DB7C; }
+.bar-fill.anxious { background: #DA77F2; }
+.bar-fill.focused { background: #74C0FC; }
+.bar-fill.sad { background: #748FFC; }
+
+.bar-pct {
+  width: 36px;
+  font-size: 13px;
+  opacity: 0.5;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+#group-members {
+  margin-bottom: 16px;
+}
+
+.member-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  margin-bottom: 6px;
+}
+
+.member-emoji {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.member-name {
+  flex: 1;
+  text-align: left;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.member-emotion {
+  font-size: 13px;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+#group-count {
+  font-size: 13px;
+  opacity: 0.4;
+  margin-bottom: 20px;
 }
 
 /* Animations */
