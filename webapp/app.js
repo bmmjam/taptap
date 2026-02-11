@@ -3,9 +3,10 @@
 
   var MAX_DURATION = 6000;
 
-  // --- API URL from query params ---
+  // --- API URL and room from query params ---
   var params = new URLSearchParams(window.location.search);
   var API_URL = params.get('api') || '';
+  var ROOM = params.get('room') || '';
 
   // --- DOM ---
   var introScreen = document.getElementById('intro-screen');
@@ -255,6 +256,7 @@
         name: userName,
         emotion: result.emotion,
         stats: result.stats,
+        room: ROOM,
       }),
     }).catch(function () {});
   }
@@ -368,7 +370,7 @@
   function fetchGroupResults() {
     if (!API_URL) return;
     document.getElementById('group-error').textContent = '';
-    fetch(API_URL + '/api/results')
+    fetch(API_URL + '/api/results' + (ROOM ? '?room=' + ROOM : ''))
       .then(function (r) { return r.json(); })
       .then(renderGroupDashboard)
       .catch(function () {
@@ -628,6 +630,7 @@
         accuracy_rating: feedbackData.rating,
         corrected_emotion: feedbackData.correctedEmotion,
       },
+      room: ROOM,
     };
     fetch(API_URL + '/api/dataset', {
       method: 'POST',
