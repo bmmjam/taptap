@@ -9,6 +9,7 @@
 
   // --- DOM ---
   var introScreen = document.getElementById('intro-screen');
+  var surveyScreen = document.getElementById('survey-screen');
   var countdownScreen = document.getElementById('countdown-screen');
   var countdownNumber = document.getElementById('countdown-number');
   var tapScreen = document.getElementById('tap-screen');
@@ -20,6 +21,11 @@
   var doneBtn = document.getElementById('done-btn');
   var backResultBtn = document.getElementById('back-result-btn');
   var groupRetryBtn = document.getElementById('group-retry-btn');
+  var surveyNextBtn = document.getElementById('survey-next-btn');
+  var feedbackSection = document.getElementById('feedback-section');
+  var feedbackCorrection = document.getElementById('feedback-correction');
+  var feedbackDoneBtn = document.getElementById('feedback-done-btn');
+  var postFeedbackButtons = document.getElementById('post-feedback-buttons');
   var tapArea = document.getElementById('tap-area');
   var face = document.getElementById('face');
   var pulseRing = document.getElementById('pulse-ring');
@@ -54,6 +60,12 @@
   var emotionChart = null;
   var tapsChart = null;
   var pollTimer = null;
+
+  // --- Dataset collection state ---
+  var surveyData = { valence: null, arousal: null, dominance: null, emotion: null };
+  var feedbackData = { rating: null, correctedEmotion: null };
+  var attemptNumber = 0;
+  var sessionId = '';
 
   // --- Telegram ---
   var tg = window.Telegram && window.Telegram.WebApp;
@@ -202,6 +214,7 @@
 
   function hideAll() {
     introScreen.classList.add('hidden');
+    surveyScreen.classList.add('hidden');
     countdownScreen.classList.add('hidden');
     tapScreen.classList.add('hidden');
     resultScreen.classList.add('hidden');
@@ -338,7 +351,10 @@
       + ' | Частота: ' + st.frequency + '/с | Ритм: ' + st.regularity + '%'
       + (st.trailDist > 0 ? ' | След: ' + st.trailDist + 'px' : '')
       + (gyroAvailable ? ' | Тряска: ' + st.shakeIntensity : '');
-    groupBtn.style.display = API_URL ? '' : 'none';
+    // Show feedback, hide nav buttons until feedback done
+    resetFeedbackUI();
+    feedbackSection.classList.remove('hidden');
+    postFeedbackButtons.classList.add('hidden');
   }
 
   // --- Group Dashboard ---
@@ -486,9 +502,150 @@
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  // --- Survey ---
+  function generateSessionId() {
+    return 'xxxx-xxxx-xxxx'.replace(/x/g, function () {
+      return Math.floor(Math.random() * 16).toString(16);
+    });
+  }
+
+  function showSurvey() {
+    surveyData = { valence: null, arousal: null, dominance: null, emotion: null };
+    attemptNumber++;
+    sessionId = generateSessionId();
+    // Reset UI selections
+    var allCircles = surveyScreen.querySelectorAll('.sam-circle');
+    for (var i = 0; i < allCircles.length; i++) allCircles[i].classList.remove('selected');
+    var allEmotions = surveyScreen.querySelectorAll('.emotion-option');
+    for (var i = 0; i < allEmotions.length; i++) allEmotions[i].classList.remove('selected');
+    surveyNextBtn.disabled = true;
+    hideAll();
+    surveyScreen.classList.remove('hidden');
+  }
+
+  function checkSurveyComplete() {
+    surveyNextBtn.disabled = !(surveyData.valence && surveyData.arousal && surveyData.dominance && surveyData.emotion);
+  }
+
+  // SAM circles click
+  var samScales = surveyScreen.querySelectorAll('.sam-scale');
+  for (var si = 0; si < samScales.length; si++) {
+    (function (scale) {
+      var scaleName = scale.getAttribute('data-scale');
+      var circles = scale.querySelectorAll('.sam-circle');
+      for (var ci = 0; ci < circles.length; ci++) {
+        (function (circle) {
+          circle.addEventListener('click', function () {
+            var siblings = scale.querySelectorAll('.sam-circle');
+            for (var j = 0; j < siblings.length; j++) siblings[j].classList.remove('selected');
+            circle.classList.add('selected');
+            surveyData[scaleName] = parseInt(circle.getAttribute('data-value'));
+            checkSurveyComplete();
+          });
+        })(circles[ci]);
+      }
+    })(samScales[si]);
+  }
+
+  // Survey emotion picker
+  var surveyEmotionOptions = surveyScreen.querySelectorAll('.emotion-option');
+  for (var ei = 0; ei < surveyEmotionOptions.length; ei++) {
+    (function (opt) {
+      opt.addEventListener('click', function () {
+        for (var j = 0; j < surveyEmotionOptions.length; j++) surveyEmotionOptions[j].classList.remove('selected');
+        opt.classList.add('selected');
+        surveyData.emotion = opt.getAttribute('data-emotion');
+        checkSurveyComplete();
+      });
+    })(surveyEmotionOptions[ei]);
+  }
+
+  // --- Feedback ---
+  function resetFeedbackUI() {
+    feedbackData = { rating: null, correctedEmotion: null };
+    var stars = document.querySelectorAll('#star-rating .star');
+    for (var i = 0; i < stars.length; i++) stars[i].classList.remove('active');
+    feedbackCorrection.classList.add('hidden');
+    var corrEmotions = feedbackCorrection.querySelectorAll('.emotion-option');
+    for (var i = 0; i < corrEmotions.length; i++) corrEmotions[i].classList.remove('selected');
+    feedbackDoneBtn.disabled = true;
+  }
+
+  // Star rating
+  var stars = document.querySelectorAll('#star-rating .star');
+  for (var sti = 0; sti < stars.length; sti++) {
+    (function (star, idx) {
+      star.addEventListener('click', function () {
+        feedbackData.rating = idx + 1;
+        for (var j = 0; j < stars.length; j++) {
+          stars[j].classList.toggle('active', j <= idx);
+        }
+        if (feedbackData.rating < 4) {
+          feedbackCorrection.classList.remove('hidden');
+          // Require corrected emotion if rating < 4
+          feedbackDoneBtn.disabled = !feedbackData.correctedEmotion;
+        } else {
+          feedbackCorrection.classList.add('hidden');
+          feedbackData.correctedEmotion = null;
+          feedbackDoneBtn.disabled = false;
+        }
+      });
+    })(stars[sti], sti);
+  }
+
+  // Feedback emotion correction picker
+  var correctionOptions = feedbackCorrection.querySelectorAll('.emotion-option');
+  for (var coi = 0; coi < correctionOptions.length; coi++) {
+    (function (opt) {
+      opt.addEventListener('click', function () {
+        for (var j = 0; j < correctionOptions.length; j++) correctionOptions[j].classList.remove('selected');
+        opt.classList.add('selected');
+        feedbackData.correctedEmotion = opt.getAttribute('data-emotion');
+        feedbackDoneBtn.disabled = false;
+      });
+    })(correctionOptions[coi]);
+  }
+
+  // --- Send dataset ---
+  function sendDataset() {
+    if (!API_URL || !lastResult) return;
+    var payload = {
+      user_id: userId,
+      user_name: userName,
+      session_id: sessionId,
+      attempt_number: attemptNumber,
+      timestamp: new Date().toISOString(),
+      survey: {
+        valence: surveyData.valence,
+        arousal: surveyData.arousal,
+        dominance: surveyData.dominance,
+        self_reported_emotion: surveyData.emotion,
+      },
+      tap_features: lastResult.stats,
+      scores: lastResult.scores,
+      model_prediction: lastResult.emotion,
+      feedback: {
+        accuracy_rating: feedbackData.rating,
+        corrected_emotion: feedbackData.correctedEmotion,
+      },
+    };
+    fetch(API_URL + '/api/dataset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).catch(function () {});
+  }
+
   // --- Events ---
-  startBtn.addEventListener('click', startCountdown);
-  retryBtn.addEventListener('click', startCountdown);
+  startBtn.addEventListener('click', showSurvey);
+  surveyNextBtn.addEventListener('click', startCountdown);
+  feedbackDoneBtn.addEventListener('click', function () {
+    sendDataset();
+    feedbackSection.classList.add('hidden');
+    postFeedbackButtons.classList.remove('hidden');
+    groupBtn.style.display = API_URL ? '' : 'none';
+  });
+  retryBtn.addEventListener('click', showSurvey);
   doneBtn.addEventListener('click', function (e) { e.stopPropagation(); if (sessionActive) endSession(); });
   groupBtn.addEventListener('click', showGroupScreen);
   backResultBtn.addEventListener('click', function () {
@@ -497,7 +654,7 @@
   });
   groupRetryBtn.addEventListener('click', function () {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-    startCountdown();
+    showSurvey();
   });
   tapArea.addEventListener('pointerdown', onPointerDown);
   tapArea.addEventListener('pointermove', onPointerMove);

@@ -2,6 +2,7 @@ import os
 import json
 import asyncio
 from datetime import datetime
+from pathlib import Path
 
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types
@@ -206,12 +207,27 @@ async def handle_api_reset(request):
     return web.json_response({"ok": True})
 
 
+DATASET_FILE = Path(__file__).parent / "dataset.jsonl"
+
+
+async def handle_post_dataset(request):
+    try:
+        data = await request.json()
+        data["server_timestamp"] = datetime.now().isoformat()
+        with open(DATASET_FILE, "a", encoding="utf-8") as f:
+            f.write(json.dumps(data, ensure_ascii=False) + "\n")
+        return web.json_response({"ok": True})
+    except Exception as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=400)
+
+
 async def start_api():
     app = web.Application(middlewares=[cors_middleware])
     app.router.add_route("OPTIONS", "/api/{tail:.*}", handle_options)
     app.router.add_post("/api/result", handle_post_result)
     app.router.add_get("/api/results", handle_get_results)
     app.router.add_post("/api/reset", handle_api_reset)
+    app.router.add_post("/api/dataset", handle_post_dataset)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", 8080)

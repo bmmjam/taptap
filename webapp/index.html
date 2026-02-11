@@ -17,6 +17,70 @@
       <button id="start-btn">Начать</button>
     </div>
 
+    <div id="survey-screen" class="hidden">
+      <h2 class="survey-title">Как ты себя чувствуешь?</h2>
+      <p class="survey-hint">Ответь честно — это поможет улучшить точность</p>
+
+      <div class="sam-scale" data-scale="valence">
+        <p class="sam-label">Настроение</p>
+        <div class="sam-row">
+          <span class="sam-anchor">😢</span>
+          <div class="sam-circles">
+            <div class="sam-circle" data-value="1">1</div>
+            <div class="sam-circle" data-value="2">2</div>
+            <div class="sam-circle" data-value="3">3</div>
+            <div class="sam-circle" data-value="4">4</div>
+            <div class="sam-circle" data-value="5">5</div>
+          </div>
+          <span class="sam-anchor">😊</span>
+        </div>
+      </div>
+
+      <div class="sam-scale" data-scale="arousal">
+        <p class="sam-label">Энергия</p>
+        <div class="sam-row">
+          <span class="sam-anchor">😴</span>
+          <div class="sam-circles">
+            <div class="sam-circle" data-value="1">1</div>
+            <div class="sam-circle" data-value="2">2</div>
+            <div class="sam-circle" data-value="3">3</div>
+            <div class="sam-circle" data-value="4">4</div>
+            <div class="sam-circle" data-value="5">5</div>
+          </div>
+          <span class="sam-anchor">🤯</span>
+        </div>
+      </div>
+
+      <div class="sam-scale" data-scale="dominance">
+        <p class="sam-label">Контроль</p>
+        <div class="sam-row">
+          <span class="sam-anchor">🫠</span>
+          <div class="sam-circles">
+            <div class="sam-circle" data-value="1">1</div>
+            <div class="sam-circle" data-value="2">2</div>
+            <div class="sam-circle" data-value="3">3</div>
+            <div class="sam-circle" data-value="4">4</div>
+            <div class="sam-circle" data-value="5">5</div>
+          </div>
+          <span class="sam-anchor">💪</span>
+        </div>
+      </div>
+
+      <div class="emotion-picker">
+        <p class="sam-label">Что ближе всего?</p>
+        <div class="emotion-grid">
+          <div class="emotion-option" data-emotion="stressed">😤<span>Стресс</span></div>
+          <div class="emotion-option" data-emotion="excited">🤩<span>Энергия</span></div>
+          <div class="emotion-option" data-emotion="calm">😌<span>Спокойствие</span></div>
+          <div class="emotion-option" data-emotion="anxious">😟<span>Тревога</span></div>
+          <div class="emotion-option" data-emotion="focused">🧐<span>Фокус</span></div>
+          <div class="emotion-option" data-emotion="sad">😔<span>Грусть</span></div>
+        </div>
+      </div>
+
+      <button id="survey-next-btn" disabled>Далее</button>
+    </div>
+
     <div id="countdown-screen" class="hidden">
       <p class="countdown-hint">Приготовься тапать по смайлику!</p>
       <div id="countdown-number">3</div>
@@ -60,8 +124,33 @@
           <ul id="advice-list"></ul>
         </div>
         <div id="result-stats"></div>
-        <button id="group-btn">Общая обстановка</button>
-        <button id="retry-btn" class="secondary">Попробовать ещё раз</button>
+        <div id="feedback-section" class="hidden">
+          <div class="feedback-divider"></div>
+          <p class="feedback-question">Насколько точно?</p>
+          <div class="star-rating" id="star-rating">
+            <span class="star" data-value="1">★</span>
+            <span class="star" data-value="2">★</span>
+            <span class="star" data-value="3">★</span>
+            <span class="star" data-value="4">★</span>
+            <span class="star" data-value="5">★</span>
+          </div>
+          <div id="feedback-correction" class="hidden">
+            <p class="feedback-question">А что на самом деле?</p>
+            <div class="emotion-grid emotion-grid-small">
+              <div class="emotion-option" data-emotion="stressed">😤<span>Стресс</span></div>
+              <div class="emotion-option" data-emotion="excited">🤩<span>Энергия</span></div>
+              <div class="emotion-option" data-emotion="calm">😌<span>Спокойствие</span></div>
+              <div class="emotion-option" data-emotion="anxious">😟<span>Тревога</span></div>
+              <div class="emotion-option" data-emotion="focused">🧐<span>Фокус</span></div>
+              <div class="emotion-option" data-emotion="sad">😔<span>Грусть</span></div>
+            </div>
+          </div>
+          <button id="feedback-done-btn" disabled>Готово</button>
+        </div>
+        <div id="post-feedback-buttons" class="hidden">
+          <button id="group-btn">Общая обстановка</button>
+          <button id="retry-btn" class="secondary">Попробовать ещё раз</button>
+        </div>
       </div>
     </div>
 
