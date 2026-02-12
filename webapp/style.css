@@ -171,6 +171,7 @@ button.secondary {
 #group-count { font-size: 14px; opacity: 0.5; margin-bottom: 12px; }
 #group-dominant { margin-bottom: 16px; font-size: 16px; line-height: 1.6; }
 #group-error { color: #FF6B6B; font-size: 13px; min-height: 0; margin-bottom: 8px; }
+.group-loading { font-size: 15px; opacity: 0.5; padding: 32px 0; }
 
 .chart-container {
   background: rgba(255,255,255,0.04); border-radius: 16px;

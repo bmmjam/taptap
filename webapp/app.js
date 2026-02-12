@@ -61,6 +61,7 @@
   var emotionChart = null;
   var tapsChart = null;
   var pollTimer = null;
+  var lastGroupJSON = '';
 
   // --- Dataset collection state ---
   var surveyData = { valence: null, arousal: null, dominance: null, emotion: null };
@@ -363,6 +364,13 @@
   function showGroupScreen() {
     hideAll();
     groupScreen.classList.remove('hidden');
+    lastGroupJSON = '';
+    document.getElementById('group-loading').style.display = '';
+    document.getElementById('group-count').textContent = '';
+    document.getElementById('group-dominant').innerHTML = '';
+    document.getElementById('emotion-chart-wrap').style.display = 'none';
+    document.getElementById('taps-chart-wrap').style.display = 'none';
+    document.getElementById('members-list').innerHTML = '';
     fetchGroupResults();
     pollTimer = setInterval(fetchGroupResults, 3000);
   }
@@ -372,8 +380,15 @@
     document.getElementById('group-error').textContent = '';
     fetch(API_URL + '/api/results' + (ROOM ? '?room=' + ROOM : ''))
       .then(function (r) { return r.json(); })
-      .then(renderGroupDashboard)
+      .then(function (data) {
+        document.getElementById('group-loading').style.display = 'none';
+        var json = JSON.stringify(data);
+        if (json === lastGroupJSON) return;
+        lastGroupJSON = json;
+        renderGroupDashboard(data);
+      })
       .catch(function () {
+        document.getElementById('group-loading').style.display = 'none';
         document.getElementById('group-error').textContent = 'Нет связи с сервером';
       });
   }
@@ -413,17 +428,23 @@
         colors.push(colorMap[order[i]] || '#888');
       }
     }
-    if (emotionChart) emotionChart.destroy();
     if (values.length === 0) { wrap.style.display = 'none'; return; }
     wrap.style.display = '';
-    emotionChart = new Chart(canvas, {
-      type: 'doughnut',
-      data: { labels: labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0 }] },
-      options: {
-        responsive: true, maintainAspectRatio: true,
-        plugins: { legend: { position: 'bottom', labels: { color: '#eee', font: { size: 13 }, padding: 12 } } }
-      }
-    });
+    if (emotionChart) {
+      emotionChart.data.labels = labels;
+      emotionChart.data.datasets[0].data = values;
+      emotionChart.data.datasets[0].backgroundColor = colors;
+      emotionChart.update();
+    } else {
+      emotionChart = new Chart(canvas, {
+        type: 'doughnut',
+        data: { labels: labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0 }] },
+        options: {
+          responsive: true, maintainAspectRatio: true,
+          plugins: { legend: { position: 'bottom', labels: { color: '#eee', font: { size: 13 }, padding: 12 } } }
+        }
+      });
+    }
   }
 
   function renderTapsChart(data) {
@@ -437,21 +458,27 @@
       values.push(members[i].stats ? (members[i].stats.tapCount || 0) : 0);
       colors.push(colorMap[members[i].emotion] || '#888');
     }
-    if (tapsChart) tapsChart.destroy();
     if (values.length === 0) { wrap.style.display = 'none'; return; }
     wrap.style.display = '';
-    tapsChart = new Chart(canvas, {
-      type: 'bar',
-      data: { labels: labels, datasets: [{ label: 'Тапы', data: values, backgroundColor: colors, borderRadius: 6 }] },
-      options: {
-        responsive: true, maintainAspectRatio: true, indexAxis: 'y',
-        scales: {
-          x: { ticks: { color: '#aaa' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-          y: { ticks: { color: '#eee', font: { size: 13 } }, grid: { display: false } }
-        },
-        plugins: { legend: { display: false } }
-      }
-    });
+    if (tapsChart) {
+      tapsChart.data.labels = labels;
+      tapsChart.data.datasets[0].data = values;
+      tapsChart.data.datasets[0].backgroundColor = colors;
+      tapsChart.update();
+    } else {
+      tapsChart = new Chart(canvas, {
+        type: 'bar',
+        data: { labels: labels, datasets: [{ label: 'Тапы', data: values, backgroundColor: colors, borderRadius: 6 }] },
+        options: {
+          responsive: true, maintainAspectRatio: true, indexAxis: 'y',
+          scales: {
+            x: { ticks: { color: '#aaa' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+            y: { ticks: { color: '#eee', font: { size: 13 } }, grid: { display: false } }
+          },
+          plugins: { legend: { display: false } }
+        }
+      });
+    }
   }
 
   function renderMembersList(data) {
@@ -653,10 +680,14 @@
   groupBtn.addEventListener('click', showGroupScreen);
   backResultBtn.addEventListener('click', function () {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    if (emotionChart) { emotionChart.destroy(); emotionChart = null; }
+    if (tapsChart) { tapsChart.destroy(); tapsChart = null; }
     hideAll(); resultScreen.classList.remove('hidden');
   });
   groupRetryBtn.addEventListener('click', function () {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    if (emotionChart) { emotionChart.destroy(); emotionChart = null; }
+    if (tapsChart) { tapsChart.destroy(); tapsChart = null; }
     showSurvey();
   });
   tapArea.addEventListener('pointerdown', onPointerDown);
