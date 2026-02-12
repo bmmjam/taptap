@@ -62,6 +62,7 @@
   var tapsChart = null;
   var pollTimer = null;
   var lastGroupJSON = '';
+  var prefetchedGroupData = null;
 
   // --- Dataset collection state ---
   var surveyData = { valence: null, arousal: null, dominance: null, emotion: null };
@@ -259,6 +260,11 @@
         stats: result.stats,
         room: ROOM,
       }),
+    }).then(function () {
+      // Prefetch group data so it's ready when user opens the dashboard
+      return fetch(API_URL + '/api/results' + (ROOM ? '?room=' + ROOM : ''));
+    }).then(function (r) { return r.json(); }).then(function (data) {
+      prefetchedGroupData = data;
     }).catch(function () {});
   }
 
@@ -365,13 +371,21 @@
     hideAll();
     groupScreen.classList.remove('hidden');
     lastGroupJSON = '';
-    document.getElementById('group-loading').style.display = '';
     document.getElementById('group-count').textContent = '';
     document.getElementById('group-dominant').innerHTML = '';
     document.getElementById('emotion-chart-wrap').style.display = 'none';
     document.getElementById('taps-chart-wrap').style.display = 'none';
     document.getElementById('members-list').innerHTML = '';
-    fetchGroupResults();
+    if (prefetchedGroupData) {
+      document.getElementById('group-loading').style.display = 'none';
+      var data = prefetchedGroupData;
+      prefetchedGroupData = null;
+      lastGroupJSON = JSON.stringify(data);
+      renderGroupDashboard(data);
+    } else {
+      document.getElementById('group-loading').style.display = '';
+      fetchGroupResults();
+    }
     pollTimer = setInterval(fetchGroupResults, 3000);
   }
 
@@ -441,6 +455,7 @@
         data: { labels: labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0 }] },
         options: {
           responsive: true, maintainAspectRatio: true,
+          animation: { duration: 300 },
           plugins: { legend: { position: 'bottom', labels: { color: '#eee', font: { size: 13 }, padding: 12 } } }
         }
       });
@@ -471,6 +486,7 @@
         data: { labels: labels, datasets: [{ label: 'Тапы', data: values, backgroundColor: colors, borderRadius: 6 }] },
         options: {
           responsive: true, maintainAspectRatio: true, indexAxis: 'y',
+          animation: { duration: 300 },
           scales: {
             x: { ticks: { color: '#aaa' }, grid: { color: 'rgba(255,255,255,0.05)' } },
             y: { ticks: { color: '#eee', font: { size: 13 } }, grid: { display: false } }
